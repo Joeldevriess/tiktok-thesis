@@ -4,3 +4,6 @@ data/
 gen/
 .Rhistory
 .RData
+python/output/
+.ipynb_checkpoints/
+python/input/
