@@ -1,13 +1,18 @@
 # ============================================================
-# 03_build_variables.R
-# Bouwt de vier onderzoeksvariabelen per deelnemer per week:
-#   1. Discovery Ratio   – aandeel video's van nooit-eerder-geziene creators
-#   2. Session Duration  – gemiddelde sessieduur in minuten
-#   3. Like-Rate         – likes / bekeken video's
-#   4. Search Intensity  – aantal zoekopdrachten
+# 03_build_variables.R  —  bijgewerkte versie voor alle deelnemers
 #
-# Vereist: resultaat van 01_inspect_json.R (watch_raw_pXX in environment)
-#          creator_map_final_p05.csv
+# Wat doet dit script?
+#   Voor elke deelnemer berekenen we vier wekelijkse variabelen:
+#     1. Discovery Ratio   – aandeel video's van creators die deze week
+#                            voor het EERST gezien worden
+#     2. Session Duration  – gemiddelde sessieduur in minuten per week
+#     3. Like-Rate         – likes / totaal bekeken video's per week
+#     4. Search Intensity  – aantal zoekopdrachten per week
+#
+# Vereisten:
+#   - Script 01 is al gedraaid → video_browse_pXX, likes_pXX en
+#     searches_pXX staan al in het geheugen, we gebruiken die direct
+#   - Creator map CSV-bestanden staan in: data/unique_urls/
 # ============================================================
 
 library(dplyr)
@@ -15,111 +20,50 @@ library(lubridate)
 library(readr)
 library(tidyr)
 
-# ── Instellingen ────────────────────────────────────────────
-SESSION_GAP_MINS <- 30   # minuten stilte → nieuwe sessie
-WEEK_START       <- 1    # 1 = maandag (ISO)
+# ============================================================
+# STAP 1: Instellingen
+# ============================================================
+# SESSION_GAP_MINS = 30: een pauze van >30 minuten = nieuwe sessie.
+# Dit is een gangbare grens in onderzoek naar online kijkgedrag.
+# WEEK_START = 1: weken beginnen op maandag (ISO-standaard).
 
-# ── Helper: samenvattende statistieken per deelnemer ────────
-summarise_participant <- function(
-    video_browse,
-    likes,
-    favorites,
-    creator_map,
-    participant_id,
-    session_gap_mins = SESSION_GAP_MINS
-) {
-  cat(rep("=", 55), "\n", sep = "")
-  cat("  SAMENVATTENDE STATISTIEKEN –", toupper(participant_id), "\n")
-  cat(rep("=", 55), "\n", sep = "")
-  
-  # Creator lookup
-  lookup <- creator_map %>%
-    filter(!is.na(creator_username)) %>%
-    select(url = input_url, creator_username)
-  
-  browse <- video_browse %>%
-    rename(url = `Video watched`, ts_raw = `Time and Date`) %>%
-    mutate(datetime = ymd_hms(ts_raw, tz = "UTC")) %>%
-    left_join(lookup, by = "url") %>%
-    filter(!is.na(creator_username)) %>%
-    arrange(datetime)
-  
-  # ── 1. Aantal unieke creators ──────────────────────────
-  n_unique <- n_distinct(browse$creator_username)
-  cat(sprintf("\n Aantal unieke creators gezien: %d\n", n_unique))
-  
-  # ── 2. Top 10 creators ────────────────────────────────
-  top10 <- browse %>%
-    count(creator_username, name = "n_videos") %>%
-    arrange(desc(n_videos)) %>%
-    slice_head(n = 10)
-  
-  cat("\n Top 10 meest bekeken creators:\n")
-  for (i in seq_len(nrow(top10))) {
-    cat(sprintf("   %2d. %-38s %d video's\n",
-                i, top10$creator_username[i], top10$n_videos[i]))
-  }
-  
-  # ── 3. Top 5 langste sessies ──────────────────────────
-  b <- video_browse %>%
-    rename(ts_raw = `Time and Date`) %>%
-    mutate(datetime = ymd_hms(ts_raw, tz = "UTC")) %>%
-    arrange(datetime) %>%
-    mutate(
-      gap_mins   = as.numeric(difftime(datetime, lag(datetime), units = "mins")),
-      new_sess   = is.na(gap_mins) | gap_mins > session_gap_mins,
-      session_id = cumsum(new_sess)
-    )
-  
-  all_sess <- b %>%
-    group_by(session_id) %>%
-    summarise(
-      session_start    = min(datetime),
-      session_dur_mins = as.numeric(difftime(max(datetime), min(datetime), units = "mins")),
-      .groups = "drop"
-    ) %>%
-    arrange(desc(session_dur_mins))
-  
-  top_sess <- slice_head(all_sess, n = 5)
-  
-  cat(sprintf("\n Totaal aantal sessies: %d\n", nrow(all_sess)))
-  
-  cat("\n Top 5 langste sessies:\n")
-  for (i in seq_len(nrow(top_sess))) {
-    cat(sprintf("   %d. %s  →  %.1f min\n",
-                i,
-                format(top_sess$session_start[i], "%Y-%m-%d %H:%M"),
-                top_sess$session_dur_mins[i]))
-  }
-  
-  # ── 4. Favoriete video's ──────────────────────────────
-  cat(sprintf("\n Favoriete video's opgeslagen: %d\n", nrow(favorites)))
-  if (nrow(favorites) > 0) {
-    fav <- favorites %>%
-      rename(url = Video, ts_raw = Date) %>%
-      mutate(datetime = ymd_hms(ts_raw, tz = "UTC")) %>%
-      left_join(lookup, by = "url")
-    for (i in seq_len(nrow(fav))) {
-      creator <- ifelse(is.na(fav$creator_username[i]), "onbekend", fav$creator_username[i])
-      cat(sprintf("   • %s  |  Creator: %s\n",
-                  format(fav$datetime[i], "%Y-%m-%d"), creator))
-      cat(sprintf("     %s\n", substr(fav$url[i], 1, 70)))
-    }
-  }
-  
-  cat(rep("=", 55), "\n\n", sep = "")
-}
+SESSION_GAP_MINS <- 30
+WEEK_START       <- 1
 
-# ── Helper: verwerk één deelnemer ───────────────────────────
-build_panel_for_participant <- function(
-    video_browse,   # data.frame: kolommen "Video watched", "Time and Date"
-    likes,          # data.frame: kolommen "Video", "Date"
-    searches,       # data.frame: kolommen "Search Term", "Date"
-    creator_map,    # data.frame: kolommen input_url, creator_username
-    participant_id  # string, bijv. "p05"
+# ============================================================
+# STAP 2: Lijst van alle deelnemers
+# ============================================================
+# p12 en p20 hebben geen video browse data (zie script 01),
+# die laten we weg.
+
+alle_deelnemers <- c(
+  "p01", "p02", "p03", "p04", "p05", "p06", "p07",
+  "p08", "p09", "p10", "p11", "p13", "p14", "p15"
+)
+
+# ============================================================
+# STAP 3: Kernfunctie — bouw het weekpanel voor één deelnemer
+# ============================================================
+# Door de logica in één functie te zetten, hoeven we de stappen
+# maar één keer te schrijven en roepen we de functie gewoon 14x aan.
+
+build_panel_voor_deelnemer <- function(
+    video_browse,    # data frame met alle bekeken video's + tijdstip
+    likes,           # data frame met gelikte video's + tijdstip
+    searches,        # data frame met zoekopdrachten + tijdstip
+    creator_map,     # data frame: input_url → creator_username
+    deelnemer_id     # string, bijv. "p05"
 ) {
   
-  # ── 1. Browse history opschonen ──────────────────────────
+  # ── 3a. Kijkgeschiedenis koppelen aan creators ─────────────
+  # Waarom?
+  #   We hebben de creator nodig om te weten of iemand "nieuw" is.
+  #   Video's zonder gekende creator gooien we weg voor de
+  #   Discovery Ratio — zonder creator kunnen we niet bepalen of
+  #   het een nieuwe of bekende creator is.
+  #   Voor Like-Rate en Search Intensity gebruiken we ALLE video's
+  #   (ook zonder creator), zie stap 3c en 3d.
+  
   browse <- video_browse %>%
     rename(url = `Video watched`, ts_raw = `Time and Date`) %>%
     mutate(
@@ -132,189 +76,285 @@ build_panel_for_participant <- function(
         select(url = input_url, creator_username),
       by = "url"
     ) %>%
-    # Behoud alleen video's waarvoor we een creator kennen
     filter(!is.na(creator_username)) %>%
     arrange(datetime)
   
-  # ── 2. DISCOVERY RATIO ───────────────────────────────────
-  # Een creator is "nieuw" in week W als hun allereerste verschijning
-  # in de kijkgeschiedenis binnen week W valt (nooit eerder gezien).
+  # ── 3b. Discovery Ratio ────────────────────────────────────
+  # Definitie:
+  #   Een creator is "nieuw" in week W als dit de allereerste week
+  #   is dat de deelnemer een video van die creator heeft gezien.
+  #   Discovery Ratio = video's van nieuwe creators / totaal gemapte video's
+  #
+  # Voorbeeld: als iemand in week 5 voor het eerst een video ziet van
+  # creator X, dan telt die video mee als "nieuw" in week 5 — ook als
+  # hij daarna nog 10 video's van X ziet in diezelfde week.
   
-  creator_first_week <- browse %>%
+  eerste_week_per_creator <- browse %>%
     group_by(creator_username) %>%
-    summarise(first_week = min(week), .groups = "drop")
+    summarise(eerste_week = min(week), .groups = "drop")
   
   browse <- browse %>%
-    left_join(creator_first_week, by = "creator_username") %>%
-    mutate(is_new_creator = (week == first_week))
+    left_join(eerste_week_per_creator, by = "creator_username") %>%
+    mutate(is_nieuwe_creator = (week == eerste_week))
   
-  discovery_ratio_weekly <- browse %>%
+  discovery_per_week <- browse %>%
     group_by(week) %>%
     summarise(
-      n_videos_mapped      = n(),
-      n_new_creator_videos = sum(is_new_creator),
-      discovery_ratio      = n_new_creator_videos / n_videos_mapped,
+      n_videos_gemapped    = n(),
+      n_videos_nieuwe_crea = sum(is_nieuwe_creator),
+      discovery_ratio      = n_videos_nieuwe_crea / n_videos_gemapped,
       .groups = "drop"
     )
   
-  # ── 3. SESSION DURATION ──────────────────────────────────
-  # Sessie: opeenvolgende video's met < SESSION_GAP_MINS tussenpauze.
-  # Sessieduur = tijd eerste t/m laatste video in de sessie.
-  # Week van sessie = de week waarin de sessie begint.
+  # ── 3c. Session Duration ───────────────────────────────────
+  # Definitie:
+  #   Sessie = aaneengesloten kijkreeks waarbij de pauze tussen
+  #   twee opeenvolgende video's korter is dan SESSION_GAP_MINS.
+  #   Sessieduur = tijd van eerste t/m laatste video in de sessie.
+  #   We berekenen het gemiddelde per week.
+  #
+  # cumsum(nieuwe_sessie) werkt als een oplopende teller:
+  #   elke keer dat er een nieuwe sessie begint, gaat de sessie_id
+  #   met 1 omhoog. Zo krijgt elke video een sessie-label.
   
-  sessions <- browse %>%
+  sessies <- browse %>%
     arrange(datetime) %>%
     mutate(
-      gap_mins    = as.numeric(difftime(datetime, lag(datetime), units = "mins")),
-      new_session = is.na(gap_mins) | gap_mins > SESSION_GAP_MINS,
-      session_id  = cumsum(new_session)
+      pauze_mins    = as.numeric(difftime(datetime, lag(datetime), units = "mins")),
+      nieuwe_sessie = is.na(pauze_mins) | pauze_mins > SESSION_GAP_MINS,
+      sessie_id     = cumsum(nieuwe_sessie)
     )
   
-  session_stats <- sessions %>%
-    group_by(session_id) %>%
+  sessie_stats <- sessies %>%
+    group_by(sessie_id) %>%
     summarise(
-      session_start    = min(datetime),
-      session_end      = max(datetime),
-      session_dur_mins = as.numeric(difftime(session_end, session_start, units = "mins")),
-      week             = floor_date(min(datetime), "week", week_start = WEEK_START),
+      sessie_start    = min(datetime),
+      sessie_dur_mins = as.numeric(difftime(max(datetime), min(datetime), units = "mins")),
+      week            = floor_date(min(datetime), "week", week_start = WEEK_START),
       .groups = "drop"
     )
   
-  session_duration_weekly <- session_stats %>%
+  sessie_duur_per_week <- sessie_stats %>%
     group_by(week) %>%
     summarise(
-      n_sessions           = n(),
-      avg_session_dur_mins = mean(session_dur_mins),
+      n_sessies           = n(),
+      gem_sessieduur_mins = mean(sessie_dur_mins),
       .groups = "drop"
     )
   
-  # ── 4. LIKE-RATE ─────────────────────────────────────────
-  # Like-Rate = aantal likes in week W / aantal bekeken video's in week W
-  # (gebaseerd op de volledige browse history, niet alleen gemapte video's)
+  # ── 3d. Like-Rate ──────────────────────────────────────────
+  # Definitie:
+  #   Like-Rate = likes in week W / totaal bekeken video's in week W
+  #
+  # Waarom de VOLLEDIGE browse history als noemer?
+  #   Een deelnemer kan een video liken die niet in de creator map zit
+  #   (bijv. omdat de URL niet gekropen kon worden). Als we alleen
+  #   gemapte video's tellen, overschatten we de like-rate.
   
-  n_videos_per_week <- video_browse %>%
+  videos_per_week <- video_browse %>%
     rename(ts_raw = `Time and Date`) %>%
     mutate(
       datetime = ymd_hms(ts_raw, tz = "UTC"),
       week     = floor_date(datetime, "week", week_start = WEEK_START)
     ) %>%
     group_by(week) %>%
-    summarise(n_videos_total = n(), .groups = "drop")
+    summarise(n_videos_totaal = n(), .groups = "drop")
   
-  likes_clean <- likes %>%
+  likes_per_week <- likes %>%
     rename(ts_raw = Date) %>%
     mutate(
       datetime = ymd_hms(ts_raw, tz = "UTC"),
       week     = floor_date(datetime, "week", week_start = WEEK_START)
-    )
-  
-  likes_per_week <- likes_clean %>%
+    ) %>%
     group_by(week) %>%
     summarise(n_likes = n(), .groups = "drop")
   
-  like_rate_weekly <- n_videos_per_week %>%
+  like_rate_per_week <- videos_per_week %>%
     left_join(likes_per_week, by = "week") %>%
     mutate(
-      n_likes   = replace_na(n_likes, 0),
-      like_rate = n_likes / n_videos_total
+      n_likes   = replace_na(n_likes, 0),   # weken zonder likes → 0
+      like_rate = n_likes / n_videos_totaal
     )
   
-  # ── 5. SEARCH INTENSITY ──────────────────────────────────
-  # Search Intensity = aantal zoekopdrachten in week W
+  # ── 3e. Search Intensity ───────────────────────────────────
+  # Definitie:
+  #   Aantal zoekopdrachten per week. Weken zonder zoekopdrachten
+  #   krijgen de waarde 0 (niet NA).
   
-  search_intensity_weekly <- searches %>%
+  zoek_per_week <- searches %>%
     rename(ts_raw = Date) %>%
     mutate(
       datetime = ymd_hms(ts_raw, tz = "UTC"),
       week     = floor_date(datetime, "week", week_start = WEEK_START)
     ) %>%
     group_by(week) %>%
-    summarise(search_intensity = n(), .groups = "drop")
+    summarise(zoek_intensiteit = n(), .groups = "drop")
   
-  # ── 6. Samenvoegen tot weekpanel ────────────────────────
-  # Basis = alle weken met browse-activiteit (inclusief niet-gemapte video's)
-  panel <- n_videos_per_week %>%
-    left_join(discovery_ratio_weekly,  by = "week") %>%
-    left_join(session_duration_weekly, by = "week") %>%
+  # ── 3f. Alles samenvoegen tot één weekpanel ────────────────
+  # Waarom beginnen bij videos_per_week?
+  #   Dit data frame bevat ALLE weken met kijkactiviteit als basis.
+  #   Via left_join voegen we de andere variabelen toe.
+  #   Zo vallen weken niet weg als er toevallig geen likes of
+  #   zoekopdrachten waren in die week.
+  
+  panel <- videos_per_week %>%
+    left_join(discovery_per_week,   by = "week") %>%
+    left_join(sessie_duur_per_week, by = "week") %>%
     left_join(
-      like_rate_weekly %>% select(week, n_likes, like_rate),
+      like_rate_per_week %>% select(week, n_likes, like_rate),
       by = "week"
     ) %>%
-    left_join(search_intensity_weekly, by = "week") %>%
+    left_join(zoek_per_week, by = "week") %>%
     mutate(
-      # Weken zonder zoekopdrachten → 0
-      search_intensity = replace_na(search_intensity, 0),
+      zoek_intensiteit = replace_na(zoek_intensiteit, 0),
       n_likes          = replace_na(n_likes, 0),
       like_rate        = replace_na(like_rate, 0),
-      participant      = participant_id
+      deelnemer        = deelnemer_id
     ) %>%
     arrange(week) %>%
     select(
-      participant, week,
-      n_videos_total, n_videos_mapped,
-      n_new_creator_videos, discovery_ratio,
-      n_sessions, avg_session_dur_mins,
+      deelnemer, week,
+      n_videos_totaal, n_videos_gemapped,
+      n_videos_nieuwe_crea, discovery_ratio,
+      n_sessies, gem_sessieduur_mins,
       n_likes, like_rate,
-      search_intensity
+      zoek_intensiteit
     )
   
   return(panel)
 }
 
 # ============================================================
-# Uitvoering per deelnemer
+# STAP 4: Loop over alle deelnemers
 # ============================================================
-
-# ── P05 ─────────────────────────────────────────────────────
-creator_map_p05 <- read_csv("data/unique_urls/creator_map_final_p05.csv")
-
-panel_p05 <- build_panel_for_participant(
-  video_browse   = watch_raw_p05$tiktok_video_browsing_history[[1]],
-  likes          = watch_raw_p05$tiktok_like_list[[3]],
-  searches       = watch_raw_p05$tiktok_searches[[4]],
-  creator_map    = creator_map_p05,
-  participant_id = "p05"
-)
-
-# ── Zodra andere creator maps beschikbaar zijn, herhaal voor P01/P02/P04/P06 ──
-# Voorbeeld (niet uitvoeren totdat creator maps gereed zijn):
+# Waarom get() gebruiken?
+#   Na script 01 staan de tabellen al klaar als losse variabelen:
+#   video_browse_p05, likes_p05, searches_p05, enzovoort.
+#   Met get("video_browse_p05") kunnen we die naam dynamisch
+#   opbouwen in de loop — zo hoeven we geen code te herhalen.
 #
-# creator_map_p01 <- read_csv("data/creator_maps/creator_map_final_p01.csv")
-# panel_p01 <- build_panel_for_participant(
-#   video_browse   = watch_raw_p01$tiktok_video_browsing_history[[1]],
-#   likes          = watch_raw_p01$tiktok_like_list[[3]],
-#   searches       = watch_raw_p01$tiktok_searches[[4]],
-#   creator_map    = creator_map_p01,
-#   participant_id = "p01"
-# )
+# Waarom een exists()-check vooraf?
+#   Als script 01 niet voor een bepaalde deelnemer gedraaid is,
+#   krijg je een duidelijke waarschuwing in plaats van een
+#   cryptische fout halverwege de loop.
+
+alle_panels <- list()  # verzamellijst voor de panels van alle deelnemers
+
+for (pid in alle_deelnemers) {
+  
+  cat("\n── Verwerken:", pid, "────────────────────────────────\n")
+  
+  # Bouw de variabelenamen op zoals script 01 ze aanmaakt
+  naam_browse <- paste0("video_browse_", pid)
+  naam_likes  <- paste0("likes_", pid)
+  naam_zoek   <- paste0("searches_", pid)
+  naam_map    <- paste0("data/unique_urls/creator_map_final_", pid, ".csv")
+  
+  # ── Check 1: staan de variabelen in het geheugen? ─────────
+  if (!exists(naam_browse) || !exists(naam_likes) || !exists(naam_zoek)) {
+    cat("  ⚠ Overgeslagen: één of meer variabelen niet gevonden in geheugen.\n")
+    cat("    Nodig:", naam_browse, "/", naam_likes, "/", naam_zoek, "\n")
+    cat("    Zorg dat script 01 volledig gedraaid is voor", pid, "\n")
+    next
+  }
+  
+  # ── Check 2: bestaat de creator map? ──────────────────────
+  if (!file.exists(naam_map)) {
+    cat("  ⚠ Overgeslagen: creator map niet gevonden op:", naam_map, "\n")
+    next
+  }
+  
+  # ── Haal de variabelen op en laad de creator map ──────────
+  video_browse <- get(naam_browse)
+  likes        <- get(naam_likes)
+  searches     <- get(naam_zoek)
+  creator_map  <- read_csv(naam_map, show_col_types = FALSE)
+  
+  # ── Check 3: zijn de variabelen ook écht gevuld? ──────────
+  # exists() controleert alleen of de naam bestaat, niet of er data in zit.
+  # Een NULL-waarde passeert exists() maar crasht later in rename().
+  
+  if (is.null(video_browse) || nrow(video_browse) == 0) {
+    cat("  ⚠ Overgeslagen:", naam_browse, "is NULL of leeg.\n")
+    next
+  }
+  if (is.null(likes)) {
+    cat("  ⚠ Waarschuwing: likes leeg voor", pid, "— wordt als 0 behandeld.\n")
+    likes <- data.frame(Date = character(0))  # leeg maar geldig data frame
+  }
+  if (is.null(searches)) {
+    cat("  ⚠ Waarschuwing: searches leeg voor", pid, "— wordt als 0 behandeld.\n")
+    searches <- data.frame(Date = character(0))
+  }
+  
+  # ── Bouw het weekpanel voor deze deelnemer ─────────────────
+  panel <- build_panel_voor_deelnemer(
+    video_browse = video_browse,
+    likes        = likes,
+    searches     = searches,
+    creator_map  = creator_map,
+    deelnemer_id = pid
+  )
+  
+  alle_panels[[pid]] <- panel
+  cat("  ✓ Klaar:", nrow(panel), "weken\n")
+}
 
 # ============================================================
-# Combineer alle panels tot één dataset (uitbreidbaar)
+# STAP 5: Combineer tot één dataset
 # ============================================================
-panel_all <- bind_rows(
-  panel_p05
-  # panel_p01, panel_p02, panel_p04, panel_p06
-)
+# bind_rows() stapelt alle deelnemer-panels verticaal op elkaar.
+# Het resultaat is een "long format" panel: elke rij is één week
+# voor één deelnemer. Dit is de standaard structuur voor
+# panelregressies (deelnemer × week als primary key).
 
-# ── Samenvattende statistieken per deelnemer ─────────────────
-summarise_participant(
-  video_browse   = watch_raw_p05$tiktok_video_browsing_history[[1]],
-  likes          = watch_raw_p05$tiktok_like_list[[3]],
-  favorites      = watch_raw_p05$tiktok_favorite_videos[[2]],
-  creator_map    = creator_map_p05,
-  participant_id = "p05"
-)
+panel_all <- bind_rows(alle_panels)
 
-# ── Sla op ──────────────────────────────────────────────────
+cat("\n══════════════════════════════════════════════════════\n")
+cat("  Gecombineerd panel:", nrow(panel_all), "rijen\n")
+cat("  Aantal deelnemers: ", n_distinct(panel_all$deelnemer), "\n")
+cat("══════════════════════════════════════════════════════\n")
+
+# ============================================================
+# STAP 6: Opslaan
+# ============================================================
+# Dit is het bestand dat je gebruikt voor alle verdere analyses.
+# CSV is geschikt omdat het platformonafhankelijk is en makkelijk
+# te openen in R, Excel of Python.
+
 write_csv(panel_all, "gen/analysis/weekly_panel_all.csv")
+cat("\n✓ Opgeslagen: gen/analysis/weekly_panel_all.csv\n")
 
-# ── Snelle check ────────────────────────────────────────────
-cat("\n=== Panel samenvatting ===\n")
-print(summary(panel_p05 %>% select(discovery_ratio, avg_session_dur_mins,
-                                   like_rate, search_intensity)))
+# ============================================================
+# STAP 7: Beschrijvende statistieken
+# ============================================================
+# n     = aantal niet-ontbrekende waarden
+# mean  = gemiddelde
+# sd    = standaarddeviatie
+# min   = laagste waarde
+# max   = hoogste waarde
+# n_NA  = aantal ontbrekende waarden (zou 0 moeten zijn)
 
-cat("\n=== Eerste 10 rijen P05 ===\n")
-print(head(panel_p05, 10))
+cat("\n══ Beschrijvende statistieken (alle deelnemers) ══════\n")
 
-cat("\n=== Aantal weken per deelnemer ===\n")
-print(panel_all %>% count(participant))
+stats <- panel_all %>%
+  select(discovery_ratio, gem_sessieduur_mins, like_rate, zoek_intensiteit) %>%
+  summarise(across(
+    everything(),
+    list(
+      n    = ~sum(!is.na(.)),
+      mean = ~round(mean(., na.rm = TRUE), 3),
+      sd   = ~round(sd(.,   na.rm = TRUE), 3),
+      min  = ~round(min(.,  na.rm = TRUE), 3),
+      max  = ~round(max(.,  na.rm = TRUE), 3),
+      n_NA = ~sum(is.na(.))
+    ),
+    .names = "{.col}__{.fn}"
+  )) %>%
+  pivot_longer(everything(), names_to = c("variabele", "stat"), names_sep = "__") %>%
+  pivot_wider(names_from = stat, values_from = value)
+
+print(stats, n = Inf)
+
+cat("\n══ Weken per deelnemer ═══════════════════════════════\n")
+print(panel_all %>% count(deelnemer, name = "n_weken"))
