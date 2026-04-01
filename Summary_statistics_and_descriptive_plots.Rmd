@@ -1,0 +1,231 @@
+---
+title: "Summary Statistics and Descriptive Plots"
+author: "Joël de Vries"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = FALSE,   # code niet tonen in output
+  message = FALSE,
+  warning = FALSE,
+  fig.width  = 12,
+  fig.height = 8
+)
+
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(tidyr)
+library(knitr)
+```
+
+```{r data-laden}
+panel_all <- read_csv("gen/analysis/weekly_panel_all.csv",
+                      show_col_types = FALSE)
+
+# Variabelen in long format voor de plots
+variabele_labels <- c(
+  discovery_ratio      = "Discovery Ratio\n(aandeel nieuwe creators)",
+  gem_sessieduur_mins  = "Gem. Sessieduur\n(minuten)",
+  like_rate            = "Like-Rate\n(likes / bekeken video's)",
+  zoek_intensiteit     = "Zoekintensiteit\n(aantal zoekopdrachten)"
+)
+
+panel_long <- panel_all %>%
+  select(deelnemer, week,
+         discovery_ratio, gem_sessieduur_mins,
+         like_rate, zoek_intensiteit) %>%
+  pivot_longer(
+    cols      = c(discovery_ratio, gem_sessieduur_mins,
+                  like_rate, zoek_intensiteit),
+    names_to  = "variabele",
+    values_to = "waarde"
+  ) %>%
+  mutate(
+    variabele = factor(variabele,
+                       levels = names(variabele_labels),
+                       labels = variabele_labels)
+  )
+```
+
+# Data overview
+
+Het gecombineerde weekpanel bevat **`r nrow(panel_all)` rijen** (deelnemer × week combinaties)
+voor **`r n_distinct(panel_all$deelnemer)` deelnemers**.
+De observatieperiode loopt van
+**`r format(min(panel_all$week), "%d %B %Y")`** tot
+**`r format(max(panel_all$week), "%d %B %Y")`**.
+
+```{r weken-per-deelnemer}
+panel_all %>%
+  count(deelnemer, name = "Aantal weken") %>%
+  rename(Deelnemer = deelnemer) %>%
+  kable(caption = "Aantal observatieweken per deelnemer")
+```
+
+---
+
+# Summary statistics
+
+De vier onderzoeksvariabelen samengevat over alle deelnemers en weken.
+
+```{r summary-stats}
+panel_all %>%
+  select(discovery_ratio, gem_sessieduur_mins, like_rate, zoek_intensiteit) %>%
+  summarise(across(
+    everything(),
+    list(
+      N      = ~sum(!is.na(.)),
+      Gemiddelde = ~round(mean(., na.rm = TRUE), 3),
+      SD     = ~round(sd(.,   na.rm = TRUE), 3),
+      Min    = ~round(min(.,  na.rm = TRUE), 3),
+      Max    = ~round(max(.,  na.rm = TRUE), 3),
+      `N ontbrekend` = ~sum(is.na(.))
+    ),
+    .names = "{.col}__{.fn}"
+  )) %>%
+  pivot_longer(everything(),
+               names_to  = c("Variabele", "Statistiek"),
+               names_sep = "__") %>%
+  pivot_wider(names_from = Statistiek, values_from = value) %>%
+  mutate(Variabele = recode(Variabele,
+    discovery_ratio     = "Discovery Ratio",
+    gem_sessieduur_mins = "Gem. Sessieduur (min.)",
+    like_rate           = "Like-Rate",
+    zoek_intensiteit    = "Zoekintensiteit"
+  )) %>%
+  kable(caption = "Beschrijvende statistieken per onderzoeksvariabele")
+```
+
+---
+
+# Descriptive plots
+
+## Tijdlijn per deelnemer
+
+Elke lijn vertegenwoordigt één deelnemer. De tijdlijn laat zien hoe de variabelen
+zich ontwikkelen over de observatieperiode. Opvallende trends en uitschieters zijn
+direct zichtbaar.
+
+```{r plot-tijdlijn, fig.cap="Verloop van de onderzoeksvariabelen per deelnemer over de tijd"}
+ggplot(panel_long,
+       aes(x = week, y = waarde,
+           colour = deelnemer, group = deelnemer)) +
+  geom_line(alpha = 0.7, linewidth = 0.6) +
+  geom_point(size = 0.8, alpha = 0.5) +
+  facet_wrap(~variabele, scales = "free_y", ncol = 2) +
+  scale_x_datetime(date_breaks = "3 months", date_labels = "%b %Y") +
+  labs(
+    title    = "Verloop van de onderzoeksvariabelen per deelnemer",
+    subtitle = "Elke lijn = één deelnemer | Wekelijkse waarden",
+    x        = NULL,
+    y        = "Waarde",
+    colour   = "Deelnemer"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    strip.text       = element_text(face = "bold"),
+    axis.text.x      = element_text(angle = 45, hjust = 1, size = 8),
+    legend.position  = "bottom",
+    legend.key.width = unit(1.5, "cm"),
+    panel.grid.minor = element_blank()
+  )
+```
+
+## Verdeling per variabele
+
+Boxplots geven een overzicht van de verdeling van elke variabele over alle deelnemers
+en weken. Punten buiten de whiskers (1.5 × IQR) worden beschouwd als outliers.
+De individuele datapunten zijn half-transparant weergegeven om de dichtheid
+van de data te tonen.
+
+```{r plot-verdeling, fig.cap="Verdeling van de onderzoeksvariabelen (alle deelnemers × alle weken)"}
+ggplot(panel_long,
+       aes(x = variabele, y = waarde)) +
+  geom_boxplot(outlier.shape = NA,
+               fill = "#D0E8F2", colour = "#2C7BB6",
+               width = 0.5, linewidth = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.25,
+              size = 0.9, colour = "#2C7BB6") +
+  facet_wrap(~variabele, scales = "free", ncol = 2) +
+  labs(
+    title    = "Verdeling van de onderzoeksvariabelen",
+    subtitle = "Alle deelnemers × alle weken | Punten buiten de whiskers zijn uitbijters",
+    x        = NULL,
+    y        = "Waarde"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    strip.text       = element_text(face = "bold"),
+    axis.text.x      = element_blank(),
+    axis.ticks.x     = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+
+---
+
+# Outlier analysis
+
+Deelnemer-week combinaties boven het 99e percentiel per variabele.
+Dit zijn waarden die nader bekeken moeten worden om te bepalen of ze
+inhoudelijk correct zijn of wijzen op data-problemen.
+
+```{r outliers}
+panel_all %>%
+  select(deelnemer, week,
+         discovery_ratio, gem_sessieduur_mins,
+         like_rate, zoek_intensiteit) %>%
+  pivot_longer(-c(deelnemer, week),
+               names_to  = "variabele",
+               values_to = "waarde") %>%
+  group_by(variabele) %>%
+  mutate(p99 = quantile(waarde, 0.99, na.rm = TRUE)) %>%
+  filter(waarde > p99) %>%
+  mutate(
+    week      = format(week, "%Y-%m-%d"),
+    waarde    = round(waarde, 3),
+    p99       = round(p99, 3),
+    variabele = recode(variabele,
+      discovery_ratio     = "Discovery Ratio",
+      gem_sessieduur_mins = "Gem. Sessieduur (min.)",
+      like_rate           = "Like-Rate",
+      zoek_intensiteit    = "Zoekintensiteit"
+    )
+  ) %>%
+  arrange(variabele, desc(waarde)) %>%
+  select(
+    Variabele  = variabele,
+    Deelnemer  = deelnemer,
+    Week       = week,
+    Waarde     = waarde,
+    `P99 drempel` = p99
+  ) %>%
+  ungroup() %>%
+  kable(caption = "Uitbijters boven het 99e percentiel per variabele")
+```
+
+## Toelichting per variabele
+
+**Gem. Sessieduur** — Waarden tot ~93 minuten (p06) zijn inhoudelijk correct.
+Lange sessies komen voor wanneer iemand TikTok langdurig gebruikt. Er is geen reden om deze waarden te verwijderen.
+
+**Like-Rate** — Waarden boven 1.0 zijn wiskundig onmogelijk gegeven de definitie
+(likes / bekeken video's), maar kunnen ontstaan door een timing-asynchronie:
+een video wordt in week A bekeken maar pas in week B geliked (bijv. via een
+creator-profielpagina). Waarden worden gecapped op 1.0.
+
+**Zoekintensiteit** — p06 vertoont consistent hoge zoekintensiteit (tot 172 per week),
+met een stijgende trend richting einde van de observatieperiode. Dit is
+inhoudelijk correct (actief zoekgedrag) maar afwijkend van de overige deelnemers.
+Bij modellering verdient het overweging deze variabele log-te transformeren
+vanwege de sterke rechtsscheefheid.
