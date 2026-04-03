@@ -14,7 +14,7 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-  echo    = FALSE,   # code niet tonen in output
+  echo    = FALSE,   # do not show code in output
   message = FALSE,
   warning = FALSE,
   fig.width  = 12,
@@ -28,16 +28,16 @@ library(tidyr)
 library(knitr)
 ```
 
-```{r data-laden}
+```{r data-loading}
 panel_all <- read_csv("gen/analysis/weekly_panel_all.csv",
                       show_col_types = FALSE)
 
-# Variabelen in long format voor de plots
-variabele_labels <- c(
-  discovery_ratio      = "Discovery Ratio\n(aandeel nieuwe creators)",
-  gem_sessieduur_mins  = "Gem. Sessieduur\n(minuten)",
-  like_rate            = "Like-Rate\n(likes / bekeken video's)",
-  zoek_intensiteit     = "Zoekintensiteit\n(aantal zoekopdrachten)"
+# Variables in long format for the plots
+variable_labels <- c(
+  discovery_ratio      = "Discovery Ratio\n(share of new creators)",
+  gem_sessieduur_mins  = "Avg. Session Duration\n(minutes)",
+  like_rate            = "Like-Rate\n(likes / videos watched)",
+  zoek_intensiteit     = "Search Intensity\n(number of searches)"
 )
 
 panel_long <- panel_all %>%
@@ -47,36 +47,36 @@ panel_long <- panel_all %>%
   pivot_longer(
     cols      = c(discovery_ratio, gem_sessieduur_mins,
                   like_rate, zoek_intensiteit),
-    names_to  = "variabele",
-    values_to = "waarde"
+    names_to  = "variable",
+    values_to = "value"
   ) %>%
   mutate(
-    variabele = factor(variabele,
-                       levels = names(variabele_labels),
-                       labels = variabele_labels)
+    variable = factor(variable,
+                      levels = names(variable_labels),
+                      labels = variable_labels)
   )
 ```
 
 # Data overview
 
-Het gecombineerde weekpanel bevat **`r nrow(panel_all)` rijen** (deelnemer × week combinaties)
-voor **`r n_distinct(panel_all$deelnemer)` deelnemers**.
-De observatieperiode loopt van
-**`r format(min(panel_all$week), "%d %B %Y")`** tot
+The combined weekly panel contains **`r nrow(panel_all)` rows** (participant × week combinations)
+for **`r n_distinct(panel_all$deelnemer)` participants**.
+The observation period runs from
+**`r format(min(panel_all$week), "%d %B %Y")`** to
 **`r format(max(panel_all$week), "%d %B %Y")`**.
 
-```{r weken-per-deelnemer}
+```{r weeks-per-participant}
 panel_all %>%
-  count(deelnemer, name = "Aantal weken") %>%
-  rename(Deelnemer = deelnemer) %>%
-  kable(caption = "Aantal observatieweken per deelnemer")
+  count(deelnemer, name = "Number of weeks") %>%
+  rename(Participant = deelnemer) %>%
+  kable(caption = "Number of observation weeks per participant")
 ```
 
 ---
 
 # Summary statistics
 
-De vier onderzoeksvariabelen samengevat over alle deelnemers en weken.
+The four research variables summarized across all participants and weeks.
 
 ```{r summary-stats}
 panel_all %>%
@@ -85,51 +85,51 @@ panel_all %>%
     everything(),
     list(
       N      = ~sum(!is.na(.)),
-      Gemiddelde = ~round(mean(., na.rm = TRUE), 3),
+      Mean   = ~round(mean(., na.rm = TRUE), 3),
       SD     = ~round(sd(.,   na.rm = TRUE), 3),
       Min    = ~round(min(.,  na.rm = TRUE), 3),
       Max    = ~round(max(.,  na.rm = TRUE), 3),
-      `N ontbrekend` = ~sum(is.na(.))
+      `N missing` = ~sum(is.na(.))
     ),
     .names = "{.col}__{.fn}"
   )) %>%
   pivot_longer(everything(),
-               names_to  = c("Variabele", "Statistiek"),
+               names_to  = c("Variable", "Statistic"),
                names_sep = "__") %>%
-  pivot_wider(names_from = Statistiek, values_from = value) %>%
-  mutate(Variabele = recode(Variabele,
+  pivot_wider(names_from = Statistic, values_from = value) %>%
+  mutate(Variable = recode(Variable,
     discovery_ratio     = "Discovery Ratio",
-    gem_sessieduur_mins = "Gem. Sessieduur (min.)",
+    gem_sessieduur_mins = "Avg. Session Duration (min.)",
     like_rate           = "Like-Rate",
-    zoek_intensiteit    = "Zoekintensiteit"
+    zoek_intensiteit    = "Search Intensity"
   )) %>%
-  kable(caption = "Beschrijvende statistieken per onderzoeksvariabele")
+  kable(caption = "Descriptive statistics per research variable")
 ```
 
 ---
 
 # Descriptive plots
 
-## Tijdlijn per deelnemer
+## Timeline per participant
 
-Elke lijn vertegenwoordigt één deelnemer. De tijdlijn laat zien hoe de variabelen
-zich ontwikkelen over de observatieperiode. Opvallende trends en uitschieters zijn
-direct zichtbaar.
+Each line represents one participant. The timeline shows how the variables
+develop over the observation period. Notable trends and outliers are
+immediately visible.
 
-```{r plot-tijdlijn, fig.cap="Verloop van de onderzoeksvariabelen per deelnemer over de tijd"}
+```{r plot-timeline, fig.cap="Development of research variables per participant over time"}
 ggplot(panel_long,
-       aes(x = week, y = waarde,
+       aes(x = week, y = value,
            colour = deelnemer, group = deelnemer)) +
   geom_line(alpha = 0.7, linewidth = 0.6) +
   geom_point(size = 0.8, alpha = 0.5) +
-  facet_wrap(~variabele, scales = "free_y", ncol = 2) +
+  facet_wrap(~variable, scales = "free_y", ncol = 2) +
   scale_x_datetime(date_breaks = "3 months", date_labels = "%b %Y") +
   labs(
-    title    = "Verloop van de onderzoeksvariabelen per deelnemer",
-    subtitle = "Elke lijn = één deelnemer | Wekelijkse waarden",
+    title    = "Development of research variables per participant",
+    subtitle = "Each line = one participant | Weekly values",
     x        = NULL,
-    y        = "Waarde",
-    colour   = "Deelnemer"
+    y        = "Value",
+    colour   = "Participant"
   ) +
   theme_minimal(base_size = 11) +
   theme(
@@ -141,27 +141,26 @@ ggplot(panel_long,
   )
 ```
 
-## Verdeling per variabele
+## Distribution per variable
 
-Boxplots geven een overzicht van de verdeling van elke variabele over alle deelnemers
-en weken. Punten buiten de whiskers (1.5 × IQR) worden beschouwd als outliers.
-De individuele datapunten zijn half-transparant weergegeven om de dichtheid
-van de data te tonen.
+Boxplots provide an overview of the distribution of each variable across all participants
+and weeks. Points outside the whiskers (1.5 × IQR) are considered outliers.
+Individual data points are shown semi-transparently to convey the density of the data.
 
-```{r plot-verdeling, fig.cap="Verdeling van de onderzoeksvariabelen (alle deelnemers × alle weken)"}
+```{r plot-distribution, fig.cap="Distribution of research variables (all participants × all weeks)"}
 ggplot(panel_long,
-       aes(x = variabele, y = waarde)) +
+       aes(x = variable, y = value)) +
   geom_boxplot(outlier.shape = NA,
                fill = "#D0E8F2", colour = "#2C7BB6",
                width = 0.5, linewidth = 0.6) +
   geom_jitter(width = 0.15, alpha = 0.25,
               size = 0.9, colour = "#2C7BB6") +
-  facet_wrap(~variabele, scales = "free", ncol = 2) +
+  facet_wrap(~variable, scales = "free", ncol = 2) +
   labs(
-    title    = "Verdeling van de onderzoeksvariabelen",
-    subtitle = "Alle deelnemers × alle weken | Punten buiten de whiskers zijn uitbijters",
+    title    = "Distribution of research variables",
+    subtitle = "All participants × all weeks | Points outside whiskers are outliers",
     x        = NULL,
-    y        = "Waarde"
+    y        = "Value"
   ) +
   theme_minimal(base_size = 11) +
   theme(
@@ -176,9 +175,9 @@ ggplot(panel_long,
 
 # Outlier analysis
 
-Deelnemer-week combinaties boven het 99e percentiel per variabele.
-Dit zijn waarden die nader bekeken moeten worden om te bepalen of ze
-inhoudelijk correct zijn of wijzen op data-problemen.
+Participant-week combinations above the 99th percentile per variable.
+These are values that warrant closer inspection to determine whether they are
+substantively correct or indicative of data issues.
 
 ```{r outliers}
 panel_all %>%
@@ -186,46 +185,47 @@ panel_all %>%
          discovery_ratio, gem_sessieduur_mins,
          like_rate, zoek_intensiteit) %>%
   pivot_longer(-c(deelnemer, week),
-               names_to  = "variabele",
-               values_to = "waarde") %>%
-  group_by(variabele) %>%
-  mutate(p99 = quantile(waarde, 0.99, na.rm = TRUE)) %>%
-  filter(waarde > p99) %>%
+               names_to  = "variable",
+               values_to = "value") %>%
+  group_by(variable) %>%
+  mutate(p99 = quantile(value, 0.99, na.rm = TRUE)) %>%
+  filter(value > p99) %>%
   mutate(
-    week      = format(week, "%Y-%m-%d"),
-    waarde    = round(waarde, 3),
-    p99       = round(p99, 3),
-    variabele = recode(variabele,
+    week     = format(week, "%Y-%m-%d"),
+    value    = round(value, 3),
+    p99      = round(p99, 3),
+    variable = recode(variable,
       discovery_ratio     = "Discovery Ratio",
-      gem_sessieduur_mins = "Gem. Sessieduur (min.)",
+      gem_sessieduur_mins = "Avg. Session Duration (min.)",
       like_rate           = "Like-Rate",
-      zoek_intensiteit    = "Zoekintensiteit"
+      zoek_intensiteit    = "Search Intensity"
     )
   ) %>%
-  arrange(variabele, desc(waarde)) %>%
+  arrange(variable, desc(value)) %>%
   select(
-    Variabele  = variabele,
-    Deelnemer  = deelnemer,
-    Week       = week,
-    Waarde     = waarde,
-    `P99 drempel` = p99
+    Variable    = variable,
+    Participant = deelnemer,
+    Week        = week,
+    Value       = value,
+    `P99 threshold` = p99
   ) %>%
   ungroup() %>%
-  kable(caption = "Uitbijters boven het 99e percentiel per variabele")
+  kable(caption = "Outliers above the 99th percentile per variable")
 ```
 
-## Toelichting per variabele
+## Notes per variable
 
-**Gem. Sessieduur** — Waarden tot ~93 minuten (p06) zijn inhoudelijk correct.
-Lange sessies komen voor wanneer iemand TikTok langdurig gebruikt. Er is geen reden om deze waarden te verwijderen.
+**Avg. Session Duration** — Values up to ~93 minutes (p06) are substantively plausible.
+Long sessions occur when a participant uses TikTok for an extended period. There is no
+reason to remove these values.
 
-**Like-Rate** — Waarden boven 1.0 zijn wiskundig onmogelijk gegeven de definitie
-(likes / bekeken video's), maar kunnen ontstaan door een timing-asynchronie:
-een video wordt in week A bekeken maar pas in week B geliked (bijv. via een
-creator-profielpagina). Waarden worden gecapped op 1.0.
+**Like-Rate** — Values above 1.0 are mathematically impossible given the definition
+(likes / videos watched), but can arise due to a timing asynchrony: a video is watched
+in week A but only liked in week B (e.g. via a creator's profile page). Values are
+capped at 1.0.
 
-**Zoekintensiteit** — p06 vertoont consistent hoge zoekintensiteit (tot 172 per week),
-met een stijgende trend richting einde van de observatieperiode. Dit is
-inhoudelijk correct (actief zoekgedrag) maar afwijkend van de overige deelnemers.
-Bij modellering verdient het overweging deze variabele log-te transformeren
-vanwege de sterke rechtsscheefheid.
+**Search Intensity** — p06 shows consistently high search intensity (up to 172 per week),
+with an increasing trend towards the end of the observation period. This is
+substantively plausible (active search behavior) but deviates strongly from the other
+participants. When modeling, it may be worth considering a log-transformation of this
+variable due to its strong right skew.
