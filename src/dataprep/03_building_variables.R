@@ -38,7 +38,8 @@ WEEK_START       <- 1
 
 alle_deelnemers <- c(
   "p01", "p02", "p03", "p04", "p05", "p06", "p07",
-  "p08", "p09", "p10", "p11", "p13", "p14", "p15"
+  "p08", "p09", "p10", "p11", "p13", "p14", "p15",
+  "p16", "p17", "p18", "p19", "p22", "p23"
 )
 
 # ============================================================
@@ -209,6 +210,7 @@ build_panel_voor_deelnemer <- function(
       zoek_intensiteit = replace_na(zoek_intensiteit, 0),
       n_likes          = replace_na(n_likes, 0),
       like_rate        = replace_na(like_rate, 0),
+      like_rate        = ifelse(like_rate > 1, NA, like_rate),
       deelnemer        = deelnemer_id
     ) %>%
     arrange(week) %>%

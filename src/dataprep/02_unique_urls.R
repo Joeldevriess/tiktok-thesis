@@ -214,6 +214,62 @@ unique_urls_p15 <- video_browse_p15 %>%
 nrow(unique_urls_p15)
 write_csv(unique_urls_p15, "python/input/unique_video_urls_p15.csv")
 
+#P16
+video_browse_p16 <- watch_raw_p16$tiktok_video_browsing_history[[1]]
+
+unique_urls_p16 <- video_browse_p16 %>%
+  transmute(
+    url = `Video watched`,
+    video_id = extract_video_id(`Video watched`)
+  ) %>%
+  filter(!is.na(video_id)) %>%
+  distinct(video_id, url)
+
+nrow(unique_urls_p16)
+write_csv(unique_urls_p16, "python/input/unique_video_urls_p16.csv")
+
+#P15
+video_browse_p17 <- watch_raw_p17$tiktok_video_browsing_history[[1]]
+
+unique_urls_p17 <- video_browse_p17 %>%
+  transmute(
+    url = `Video watched`,
+    video_id = extract_video_id(`Video watched`)
+  ) %>%
+  filter(!is.na(video_id)) %>%
+  distinct(video_id, url)
+
+nrow(unique_urls_p17)
+write_csv(unique_urls_p17, "python/input/unique_video_urls_p17.csv")
+
+#P15
+video_browse_p18 <- watch_raw_p18$tiktok_video_browsing_history[[1]]
+
+unique_urls_p18 <- video_browse_p18 %>%
+  transmute(
+    url = `Video watched`,
+    video_id = extract_video_id(`Video watched`)
+  ) %>%
+  filter(!is.na(video_id)) %>%
+  distinct(video_id, url)
+
+nrow(unique_urls_p18)
+write_csv(unique_urls_p18, "python/input/unique_video_urls_p18.csv")
+
+#P15
+video_browse_p19 <- watch_raw_p19$tiktok_video_browsing_history[[1]]
+
+unique_urls_p19 <- video_browse_p19 %>%
+  transmute(
+    url = `Video watched`,
+    video_id = extract_video_id(`Video watched`)
+  ) %>%
+  filter(!is.na(video_id)) %>%
+  distinct(video_id, url)
+
+nrow(unique_urls_p19)
+write_csv(unique_urls_p19, "python/input/unique_video_urls_p19.csv")
+
 #P20 -- No video data
 #video_browse_p20 <- watch_raw_p20$tiktok_video_browsing_history[[1]]
 
@@ -227,3 +283,31 @@ write_csv(unique_urls_p15, "python/input/unique_video_urls_p15.csv")
 
 #nrow(unique_urls_p20)
 #write_csv(unique_urls_p20, "python/input/unique_video_urls_p20.csv")
+
+#P22
+video_browse_p22 <- watch_raw_p22$tiktok_video_browsing_history[[1]]
+
+unique_urls_p22 <- video_browse_p22 %>%
+  transmute(
+    url = `Video watched`,
+    video_id = extract_video_id(`Video watched`)
+  ) %>%
+  filter(!is.na(video_id)) %>%
+  distinct(video_id, url)
+
+nrow(unique_urls_p22)
+write_csv(unique_urls_p22, "python/input/unique_video_urls_p22.csv")
+
+#P15
+video_browse_p23 <- watch_raw_p23$tiktok_video_browsing_history[[1]]
+
+unique_urls_p23 <- video_browse_p23 %>%
+  transmute(
+    url = `Video watched`,
+    video_id = extract_video_id(`Video watched`)
+  ) %>%
+  filter(!is.na(video_id)) %>%
+  distinct(video_id, url)
+
+nrow(unique_urls_p23)
+write_csv(unique_urls_p23, "python/input/unique_video_urls_p23.csv")

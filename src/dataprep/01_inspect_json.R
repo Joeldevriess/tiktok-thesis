@@ -17,7 +17,13 @@ watch_raw_p12 <- stream_in(file("data/raw_json/participant_12.json"))
 watch_raw_p13 <- stream_in(file("data/raw_json/participant_13.json"))
 watch_raw_p14 <- stream_in(file("data/raw_json/participant_14.json"))
 watch_raw_p15 <- stream_in(file("data/raw_json/participant_15.json"))
+watch_raw_p16 <- stream_in(file("data/raw_json/participant_16.json"))
+watch_raw_p17 <- stream_in(file("data/raw_json/participant_17.json"))
+watch_raw_p18 <- stream_in(file("data/raw_json/participant_18.json"))
+watch_raw_p19 <- stream_in(file("data/raw_json/participant_19.json"))
 watch_raw_p20 <- stream_in(file("data/raw_json/participant_20.json"))
+watch_raw_p22 <- stream_in(file("data/raw_json/participant_22.json"))
+watch_raw_p23 <- stream_in(file("data/raw_json/participant_23.json"))
 
 # Basis inspectie
 dim(watch_raw_p01)
@@ -141,7 +147,38 @@ likes_p15        <- watch_raw_p15$tiktok_like_list[[5]]
 favorites_p15    <- watch_raw_p15$tiktok_favorite_videos[[2]]
 searches_p15     <- watch_raw_p15$tiktok_searches[[6]]         
 shares_p15       <- watch_raw_p15$tiktok_share_history[[7]]    
-logins_p15       <- watch_raw_p15$tiktok_login_history[[13]]   
+logins_p15       <- watch_raw_p15$tiktok_login_history[[13]]
+
+#P16  
+video_browse_p16 <- watch_raw_p16$tiktok_video_browsing_history[[1]]
+likes_p16        <- watch_raw_p16$tiktok_like_list[[2]]        
+searches_p16     <- watch_raw_p16$tiktok_searches[[3]]         
+shares_p16       <- watch_raw_p16$tiktok_share_history[[4]]    
+logins_p16       <- watch_raw_p16$tiktok_login_history[[7]]   
+
+#P17  
+video_browse_p17 <- watch_raw_p17$tiktok_video_browsing_history[[1]]
+likes_p17        <- watch_raw_p17$tiktok_like_list[[4]]
+favorites_p17    <- watch_raw_p17$tiktok_favorite_videos[[2]]
+searches_p17     <- watch_raw_p17$tiktok_searches[[5]]         
+shares_p17       <- watch_raw_p17$tiktok_share_history[[6]]    
+logins_p17       <- watch_raw_p17$tiktok_login_history[[12]]
+
+#P18  
+video_browse_p18 <- watch_raw_p18$tiktok_video_browsing_history[[1]]
+likes_p18        <- watch_raw_p18$tiktok_like_list[[5]]
+favorites_p18    <- watch_raw_p18$tiktok_favorite_videos[[2]]
+searches_p18     <- watch_raw_p18$tiktok_searches[[6]]         
+shares_p18       <- watch_raw_p18$tiktok_share_history[[7]]    
+logins_p18       <- watch_raw_p18$tiktok_login_history[[13]]
+
+#P19  
+video_browse_p19 <- watch_raw_p19$tiktok_video_browsing_history[[1]]
+likes_p19        <- watch_raw_p19$tiktok_like_list[[3]]
+favorites_p19    <- watch_raw_p19$tiktok_favorite_videos[[2]]
+searches_p19     <- watch_raw_p19$tiktok_searches[[4]]         
+shares_p19       <- watch_raw_p19$tiktok_share_history[[5]]    
+logins_p19       <- watch_raw_p19$tiktok_login_history[[11]]
 
 #P20  
 likes_p20        <- watch_raw_p20$tiktok_like_list[[3]]        
@@ -149,6 +186,22 @@ favorites_p20    <- watch_raw_p20$tiktok_favorite_videos[[1]]
 searches_p20     <- watch_raw_p20$tiktok_searches[[4]]         
 shares_p20       <- watch_raw_p20$tiktok_share_history[[5]]    
 logins_p20       <- watch_raw_p20$tiktok_login_history[[7]]   
+
+#P22  
+video_browse_p22 <- watch_raw_p22$tiktok_video_browsing_history[[1]]
+likes_p22        <- watch_raw_p22$tiktok_like_list[[3]]
+favorites_p22    <- watch_raw_p22$tiktok_favorite_videos[[2]]
+searches_p22     <- watch_raw_p22$tiktok_searches[[4]]         
+shares_p22       <- watch_raw_p22$tiktok_share_history[[5]]    
+logins_p22       <- watch_raw_p22$tiktok_login_history[[7]]
+
+#P23  
+video_browse_p23 <- watch_raw_p23$tiktok_video_browsing_history[[1]]
+likes_p23        <- watch_raw_p23$tiktok_like_list[[3]]
+favorites_p23    <- watch_raw_p23$tiktok_favorite_videos[[2]]
+searches_p23     <- watch_raw_p23$tiktok_searches[[4]]         
+shares_p23       <- watch_raw_p23$tiktok_share_history[[5]]    
+logins_p23       <- watch_raw_p23$tiktok_login_history[[7]]
 
 # quick checks
 dim(video_browse_p01); names(video_browse_p01)
