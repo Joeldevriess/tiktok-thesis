@@ -6,7 +6,7 @@ library(fixest)
 library(dplyr)
 library(readr)
 
-panel <- read_csv("gen/analysis/weekly_panel_all.csv") %>%
+panel <- read_csv("gen/analysis/weekly_panel_estimation.csv") %>%
   mutate(
     deelnemer = as.factor(deelnemer),
     week      = as.Date(week)

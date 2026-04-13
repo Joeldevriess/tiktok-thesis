@@ -29,7 +29,11 @@ library(knitr)
 ```
 
 ```{r data-loading}
-panel_all <- read_csv("gen/analysis/weekly_panel_all.csv",
+# Estimation sample: participants meeting both inclusion criteria
+#   (1) >= 10 weeks of observations
+#   (2) >= 500 videos per week on average
+# Excluded: p05 (56.6/week), p10 (11.8/week), p19 (140.2/week)
+panel_all <- read_csv("gen/analysis/weekly_panel_estimation.csv",
                       show_col_types = FALSE)
 
 # Variables in long format for the plots
@@ -59,8 +63,10 @@ panel_long <- panel_all %>%
 
 # Data overview
 
-The combined weekly panel contains **`r nrow(panel_all)` rows** (participant × week combinations)
-for **`r n_distinct(panel_all$deelnemer)` participants**.
+The estimation sample contains **`r nrow(panel_all)` rows** (participant × week combinations)
+for **`r n_distinct(panel_all$deelnemer)` participants**, after excluding three participants
+who did not meet the inclusion criteria (minimum 10 weeks of observations and minimum
+500 videos per week on average; excluded: p05, p10, p19).
 The observation period runs from
 **`r format(min(panel_all$week), "%d %B %Y")`** to
 **`r format(max(panel_all$week), "%d %B %Y")`**.
@@ -76,7 +82,7 @@ panel_all %>%
 
 # Summary statistics
 
-The four research variables summarized across all participants and weeks.
+The four research variables summarized across all participants and weeks in the estimation sample.
 
 ```{r summary-stats}
 panel_all %>%
@@ -158,7 +164,7 @@ ggplot(panel_long,
   facet_wrap(~variable, scales = "free", ncol = 2) +
   labs(
     title    = "Distribution of research variables",
-    subtitle = "All participants × all weeks | Points outside whiskers are outliers",
+    subtitle = "Estimation sample (17 participants) × all weeks | Points outside whiskers are outliers",
     x        = NULL,
     y        = "Value"
   ) +

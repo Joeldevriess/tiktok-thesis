@@ -318,17 +318,86 @@ cat("  Aantal deelnemers: ", n_distinct(panel_all$deelnemer), "\n")
 cat("══════════════════════════════════════════════════════\n")
 
 # ============================================================
-# STAP 6: Opslaan
+# STAP 6: Estimation sample filteren
 # ============================================================
-# Dit is het bestand dat je gebruikt voor alle verdere analyses.
-# CSV is geschikt omdat het platformonafhankelijk is en makkelijk
-# te openen in R, Excel of Python.
+# Uitsluitingscriteria (vastgesteld op basis van data-inspectie):
+#
+#   Criterium 1: minimaal 10 weken observaties
+#     Reden: een fixed effects panelmodel vereist voldoende
+#     within-person temporele variatie om de coëfficiënten
+#     betrouwbaar te schatten. Met minder dan 10 weken is
+#     die variatie structureel ontoereikend.
+#
+#   Criterium 2: minimaal 500 videos per week gemiddeld
+#     Reden: de Discovery Ratio is een cumulatieve maatstaf
+#     die een voldoende rijke kijkgeschiedenis vereist om
+#     "nieuwe" van "bekende" creators te onderscheiden.
+#     Deelnemers met structureel weinig kijkgedrag (<500/week)
+#     leveren onbetrouwbare Discovery Ratio waarden op,
+#     en kunnen ook langere periodes van inactiviteit hebben
+#     die de cumulatieve opbouw van de kijkgeschiedenis
+#     verstoren (zie Datta, Knox & Bronnenberg, 2018).
+#
+# Op basis van deze criteria worden de volgende deelnemers
+# uitgesloten:
+#   - p10: 4 weken, 11.8 videos/week  (beide criteria)
+#   - p19: 11 weken, 140.2 videos/week (activiteitscriterium)
+#   - p05: 57 weken, 56.6 videos/week  (activiteitscriterium)
 
-write_csv(panel_all, "gen/analysis/weekly_panel_all.csv")
+MIN_WEKEN         <- 10
+MIN_VIDEOS_PER_WEEK <- 500
+
+deelnemer_stats <- panel_all %>%
+  group_by(deelnemer) %>%
+  summarise(
+    n_weken             = n(),
+    gem_videos_per_week = mean(n_videos_totaal),
+    .groups = "drop"
+  )
+
+deelnemers_estimation <- deelnemer_stats %>%
+  filter(
+    n_weken             >= MIN_WEKEN,
+    gem_videos_per_week >= MIN_VIDEOS_PER_WEEK
+  ) %>%
+  pull(deelnemer)
+
+panel_estimation <- panel_all %>%
+  filter(deelnemer %in% deelnemers_estimation)
+
+cat("\n══ Estimation sample ════════════════════════════════\n")
+cat("  Uitgesloten deelnemers:\n")
+uitgesloten <- deelnemer_stats %>%
+  filter(!deelnemer %in% deelnemers_estimation) %>%
+  left_join(
+    deelnemer_stats %>% select(deelnemer, n_weken, gem_videos_per_week),
+    by = c("deelnemer", "n_weken", "gem_videos_per_week")
+  )
+for (i in seq_len(nrow(uitgesloten))) {
+  cat(sprintf("    %s: %d weken, %.1f videos/week\n",
+              uitgesloten$deelnemer[i],
+              uitgesloten$n_weken[i],
+              uitgesloten$gem_videos_per_week[i]))
+}
+cat(sprintf("  Overblijvend: %d deelnemers, %d observaties\n",
+            n_distinct(panel_estimation$deelnemer),
+            nrow(panel_estimation)))
+cat("══════════════════════════════════════════════════════\n")
+
+# ============================================================
+# STAP 7: Opslaan
+# ============================================================
+# Twee bestanden:
+#   weekly_panel_all.csv       — volledig panel (20 deelnemers)
+#   weekly_panel_estimation.csv — estimation sample (17 deelnemers)
+
+write_csv(panel_all,        "gen/analysis/weekly_panel_all.csv")
+write_csv(panel_estimation, "gen/analysis/weekly_panel_estimation.csv")
 cat("\n✓ Opgeslagen: gen/analysis/weekly_panel_all.csv\n")
+cat("✓ Opgeslagen: gen/analysis/weekly_panel_estimation.csv\n")
 
 # ============================================================
-# STAP 7: Beschrijvende statistieken
+# STAP 8: Beschrijvende statistieken (estimation sample)
 # ============================================================
 # n     = aantal niet-ontbrekende waarden
 # mean  = gemiddelde
@@ -337,9 +406,9 @@ cat("\n✓ Opgeslagen: gen/analysis/weekly_panel_all.csv\n")
 # max   = hoogste waarde
 # n_NA  = aantal ontbrekende waarden (zou 0 moeten zijn)
 
-cat("\n══ Beschrijvende statistieken (alle deelnemers) ══════\n")
+cat("\n══ Beschrijvende statistieken (estimation sample) ═══\n")
 
-stats <- panel_all %>%
+stats <- panel_estimation %>%
   select(discovery_ratio, gem_sessieduur_mins, like_rate, zoek_intensiteit) %>%
   summarise(across(
     everything(),
@@ -358,5 +427,5 @@ stats <- panel_all %>%
 
 print(stats, n = Inf)
 
-cat("\n══ Weken per deelnemer ═══════════════════════════════\n")
-print(panel_all %>% count(deelnemer, name = "n_weken"))
+cat("\n══ Weken per deelnemer (estimation sample) ══════════\n")
+print(panel_estimation %>% count(deelnemer, name = "n_weken"))
