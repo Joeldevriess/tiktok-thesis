@@ -1,0 +1,15 @@
+Statistic,Value
+Total participants (initial),20
+Participants excluded,3
+Participants included,17
+Threshold (videos/week),500
+Threshold percentile,15
+Mean videos/week (excluded),69.51
+Mean videos/week (included),2220.35
+Mean unique creators (excluded),1093.33
+Mean unique creators (included),48528.18
+Mean DR (excluded),0.78
+Mean DR (included),0.46
+Min unique creators (excluded),43
+Min unique creators (included),10915
+Correlation (activity × creators),0.92

@@ -1,181 +1,213 @@
-# ============================================================
-# 04_deleted_videos_audit.R
-#
-# Vergelijkt creator_map_final_pXX.csv met unique_video_urls_pXX.csv
-# om te bepalen hoeveel video's verwijderd zijn (of anderszins
-# niet opgelost konden worden), waardoor creator-data ontbreekt.
-#
-# Output:
-#   - Samenvatting per deelnemer (console)
-#   - Gecombineerde auditdata: gen/temp/deleted_videos_audit.csv
-#
-# Vereist bestanden:
-#   gen/temp/unique_video_urls_pXX.csv   (output van 02_unique_urls.R)
-#   data/unique_urls/creator_map_final_pXX.csv
-# ============================================================
+library(tidyverse)
+library(kableExtra)
+library(scales)
 
-library(dplyr)
-library(readr)
-library(stringr)
-library(tidyr)
-
-# ── Deelnemers ───────────────────────────────────────────────
-participants <- c(
-  "p01", "p02", "p03", "p04", "p05", "p06", "p07",
-  "p08", "p09", "p10", "p11", "p13", "p14", "p15",
-  "p16", "p17", "p18", "p19", "p22", "p23"
-)
-
-# ── Hulpfunctie: categoriseer reden van ontbrekende creator ──
-categorise_failure <- function(status_code, error, creator_username) {
-  case_when(
-    !is.na(creator_username)               ~ "OK",
-    status_code == 404                     ~ "Verwijderd (404)",
-    status_code == 403                     ~ "Privé / geblokkeerd (403)",
-    status_code %in% c(301, 302)           ~ "Redirect zonder creator",
-    str_detect(tolower(error),
-               "timeout|timed out")        ~ "Timeout",
-    str_detect(tolower(error),
-               "connection|network")       ~ "Netwerkfout",
-    is.na(status_code) & is.na(error)      ~ "Niet in creator_map",
-    TRUE                                   ~ paste0("Overig (", status_code, ")")
-  )
-}
-
-# ── Verwerk alle deelnemers ──────────────────────────────────
-audit_list <- lapply(participants, function(pid) {
-  
-  path_urls <- sprintf("gen/temp/unique_video_urls_%s.csv", pid)
-  path_map  <- sprintf("data/unique_urls/creator_map_final_%s.csv", pid)
-  
-  # Bestanden inlezen (overslaan als niet aanwezig)
-  if (!file.exists(path_urls)) {
-    message(sprintf("⚠ Bestand niet gevonden, overgeslagen: %s", path_urls))
-    return(NULL)
-  }
-  if (!file.exists(path_map)) {
-    message(sprintf("⚠ Bestand niet gevonden, overgeslagen: %s", path_map))
-    return(NULL)
-  }
-  
-  unique_urls <- read_csv(path_urls, show_col_types = FALSE)   # kolommen: url, video_id
-  creator_map <- read_csv(path_map,  show_col_types = FALSE)   # kolommen: input_url, final_url,
-  #   creator_username, status_code, error
-  
-  # Zorg dat kolomnamen kloppen
-  creator_map <- creator_map %>%
-    rename(url = input_url)
-  
-  # Koppel unique_urls aan creator_map op URL
-  joined <- unique_urls %>%
-    left_join(creator_map %>%
-                select(url, final_url, creator_username,
-                       status_code, error),
-              by = "url") %>%
-    mutate(
-      participant = pid,
-      reden       = categorise_failure(status_code, error, creator_username)
-    )
-  
-  joined
-})
-
-# Combineer
-audit_all <- bind_rows(audit_list)
-
-# ── Samenvatting per deelnemer ───────────────────────────────
-cat("\n")
-cat(strrep("=", 60), "\n")
-cat("  AUDIT: ONTBREKENDE CREATOR DATA PER DEELNEMER\n")
-cat(strrep("=", 60), "\n\n")
-
-summary_per_participant <- audit_all %>%
-  group_by(participant) %>%
+participant_stats <- panel_all %>%
+  group_by(deelnemer) %>%
   summarise(
-    totaal_unieke_urls  = n(),
-    met_creator         = sum(reden == "OK"),
-    zonder_creator      = sum(reden != "OK"),
-    pct_zonder          = round(100 * zonder_creator / totaal_unieke_urls, 1),
+    n_weeks = n(),
+    total_videos = sum(n_videos_totaal, na.rm = TRUE),
+    avg_videos_per_week = mean(n_videos_totaal, na.rm = TRUE),
+    median_videos_per_week = median(n_videos_totaal, na.rm = TRUE),
+    sd_videos_per_week = sd(n_videos_totaal, na.rm = TRUE),
+    min_videos_week = min(n_videos_totaal, na.rm = TRUE),
+    max_videos_week = max(n_videos_totaal, na.rm = TRUE),
+    
+        avg_discovery_ratio = mean(discovery_ratio, na.rm = TRUE),
+    sd_discovery_ratio = sd(discovery_ratio, na.rm = TRUE),
+    
+    total_mapped = sum(n_videos_gemapped, na.rm = TRUE),
+    est_unique_creators = sum(n_videos_nieuwe_crea, na.rm = TRUE),
+    
     .groups = "drop"
+  ) %>%
+  mutate(
+    pct_mapped = (total_mapped / total_videos) * 100,
+    threshold_group = if_else(avg_videos_per_week >= 500, "≥500", "<500"),
+    included = (avg_videos_per_week >= 500) & (n_weeks >= 10),
+    excluded_reason = case_when(
+      n_weeks < 10 & avg_videos_per_week < 500 ~ "Both criteria",
+      n_weeks < 10 ~ "< 10 weeks",
+      avg_videos_per_week < 500 ~ "< 500 videos/week",
+      TRUE ~ "Included"
+    )
   )
 
-for (i in seq_len(nrow(summary_per_participant))) {
-  r <- summary_per_participant[i, ]
-  cat(sprintf("  %s\n", toupper(r$participant)))
-  cat(sprintf("    Totaal unieke video-URL's : %d\n",  r$totaal_unieke_urls))
-  cat(sprintf("    Met creator-data          : %d\n",  r$met_creator))
-  cat(sprintf("    Zonder creator-data       : %d  (%.1f%%)\n",
-              r$zonder_creator, r$pct_zonder))
-  cat("\n")
-}
+table_individual <- participant_stats %>%
+  select(
+    deelnemer, n_weeks, avg_videos_per_week, est_unique_creators,
+    pct_mapped, avg_discovery_ratio, threshold_group, excluded_reason
+  ) %>%
+  arrange(desc(avg_videos_per_week)) %>%
+  mutate(
+    avg_videos_per_week = round(avg_videos_per_week, 1),
+    pct_mapped = round(pct_mapped, 1),
+    avg_discovery_ratio = round(avg_discovery_ratio, 3)
+  )
 
-# ── Uitsplitsing naar reden (alle deelnemers samen) ──────────
-cat(strrep("-", 60), "\n")
-cat("  UITSPLITSING NAAR REDEN (alle deelnemers gecombineerd)\n")
-cat(strrep("-", 60), "\n\n")
+print(table_individual, n = 25)
 
-reden_totaal <- audit_all %>%
-  count(reden, name = "n_videos") %>%
-  mutate(pct = round(100 * n_videos / sum(n_videos), 1)) %>%
-  arrange(desc(n_videos))
+write_csv(table_individual, "output/table_sample_selection_threshold.csv")
 
-for (i in seq_len(nrow(reden_totaal))) {
-  r <- reden_totaal[i, ]
-  cat(sprintf("  %-35s %5d  (%5.1f%%)\n", r$reden, r$n_videos, r$pct))
-}
-cat("\n")
-
-# ── Uitsplitsing naar reden PER deelnemer ───────────────────
-cat(strrep("-", 60), "\n")
-cat("  UITSPLITSING NAAR REDEN PER DEELNEMER\n")
-cat(strrep("-", 60), "\n\n")
-
-reden_per_participant <- audit_all %>%
-  count(participant, reden, name = "n_videos") %>%
-  group_by(participant) %>%
-  mutate(pct = round(100 * n_videos / sum(n_videos), 1)) %>%
-  ungroup() %>%
-  arrange(participant, desc(n_videos))
-
-for (pid in participants) {
-  sub <- reden_per_participant %>% filter(participant == pid)
-  if (nrow(sub) == 0) next
-  cat(sprintf("  %s:\n", toupper(pid)))
-  for (i in seq_len(nrow(sub))) {
-    cat(sprintf("    %-33s %5d  (%5.1f%%)\n",
-                sub$reden[i], sub$n_videos[i], sub$pct[i]))
-  }
-  cat("\n")
-}
-
-# ── Totaalregel ─────────────────────────────────────────────
-totaal <- audit_all %>%
+summary_by_group <- participant_stats %>%
+  group_by(threshold_group) %>%
   summarise(
-    totaal        = n(),
-    met_creator   = sum(reden == "OK"),
-    zonder        = sum(reden != "OK"),
-    pct_zonder    = round(100 * zonder / totaal, 1),
-    pct_verwijderd = round(100 * sum(reden == "Verwijderd (404)") / totaal, 1)
+    n_participants = n(),
+    avg_weeks = mean(n_weeks),
+    avg_videos_week = mean(avg_videos_per_week),
+    avg_unique_creators = mean(est_unique_creators),
+    avg_mapped_pct = mean(pct_mapped),
+    avg_DR = mean(avg_discovery_ratio),
+    sd_DR = sd(avg_discovery_ratio),
+    .groups = "drop"
+  ) %>%
+  mutate(across(where(is.numeric) & !n_participants, ~round(.x, 2)))
+
+print(summary_by_group)
+
+p1 <- ggplot(participant_stats, aes(x = avg_videos_per_week)) +
+  geom_histogram(bins = 15, fill = "#2C3E50", alpha = 0.8, color = "white") +
+  geom_vline(xintercept = 500, linetype = "dashed", color = "#E74C3C", 
+             size = 1.2) +
+  annotate("text", x = 500, y = Inf, 
+           label = "Threshold = 500", 
+           hjust = -0.1, vjust = 1.5, 
+           color = "#E74C3C", size = 4.5, fontface = "bold") +
+  annotate("text", x = 500, y = Inf,
+           label = sprintf("(15th percentile)"),
+           hjust = -0.1, vjust = 3,
+           color = "#E74C3C", size = 3.5) +
+  scale_x_continuous(labels = comma, breaks = seq(0, 8000, 1000)) +
+  labs(
+    title = "Distribution of Average Videos per Week",
+    subtitle = "Three participants excluded for low activity (<500 videos/week)",
+    x = "Average Videos per Week",
+    y = "Number of Participants"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(color = "grey40", size = 11),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank()
   )
 
-cat(strrep("=", 60), "\n")
-cat("  TOTAAL (alle deelnemers)\n")
-cat(strrep("=", 60), "\n")
-cat(sprintf("  Totaal unieke video-URL's : %d\n",    totaal$totaal))
-cat(sprintf("  Met creator-data          : %d\n",    totaal$met_creator))
-cat(sprintf("  Zonder creator-data       : %d  (%.1f%%)\n",
-            totaal$zonder, totaal$pct_zonder))
-cat(sprintf("  Waarvan verwijderd (404)  : %d  (%.1f%% van totaal)\n",
-            sum(audit_all$reden == "Verwijderd (404)"),
-            totaal$pct_verwijderd))
-cat(strrep("=", 60), "\n\n")
+ggsave("output/plot_videos_distribution.png", p1, 
+       width = 10, height = 6, dpi = 300)
 
-# ── Exporteer volledige auditdata ────────────────────────────
-dir.create("gen/temp", showWarnings = FALSE, recursive = TRUE)
+cor_value <- cor(participant_stats$avg_videos_per_week, 
+                 participant_stats$est_unique_creators)
 
-audit_export <- audit_all %>%
-  select(participant, video_id, url, final_url,
-         creator_username, status_code, error, reden)
+p2 <- ggplot(participant_stats, 
+             aes(x = avg_videos_per_week, 
+                 y = est_unique_creators,
+                 color = threshold_group,
+                 shape = threshold_group)) +
+  geom_vline(xintercept = 500, linetype = "dashed", 
+             color = "grey50", alpha = 0.5) +
+  geom_point(size = 4, alpha = 0.8) +
+  geom_smooth(aes(group = 1), method = "lm", se = FALSE, 
+              color = "grey30", linetype = "dotted", size = 0.8) +
+  scale_color_manual(
+    values = c("<500" = "#E74C3C", "≥500" = "#3498DB"),
+    name = "Activity Level"
+  ) +
+  scale_shape_manual(
+    values = c("<500" = 17, "≥500" = 16),
+    name = "Activity Level"
+  ) +
+  scale_x_continuous(labels = comma, breaks = seq(0, 8000, 1000)) +
+  scale_y_continuous(labels = comma) +
+  annotate("text", x = max(participant_stats$avg_videos_per_week) * 0.7, 
+           y = max(participant_stats$est_unique_creators) * 0.15,
+           label = sprintf("r = %.3f", cor_value),
+           size = 5, fontface = "bold", color = "grey30") +
+  labs(
+    title = "Unique Creators vs. Average Weekly Activity",
+    subtitle = "Strong positive correlation validates activity threshold",
+    x = "Average Videos per Week",
+    y = "Estimated Unique Creators Encountered"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(color = "grey40", size = 11),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank()
+  )
 
-write_csv(audit_export, "gen/temp/deleted_videos_audit.csv")
-cat("✓ Auditbestand opgeslagen: gen/temp/deleted_videos_audit.csv\n\n")
+ggsave("output/plot_creators_vs_activity.png", p2, 
+       width = 10, height = 6, dpi = 300)
+
+p3 <- ggplot(participant_stats, 
+             aes(x = avg_videos_per_week, 
+                 y = avg_discovery_ratio,
+                 size = n_weeks,
+                 color = threshold_group,
+                 shape = threshold_group)) +
+  geom_vline(xintercept = 500, linetype = "dashed", 
+             color = "grey50", alpha = 0.5) +
+  geom_point(alpha = 0.7) +
+  scale_color_manual(
+    values = c("<500" = "#E74C3C", "≥500" = "#3498DB"),
+    name = "Activity Level"
+  ) +
+  scale_shape_manual(
+    values = c("<500" = 17, "≥500" = 16),
+    name = "Activity Level"
+  ) +
+  scale_size_continuous(
+    range = c(3, 10),
+    name = "Weeks Observed",
+    breaks = c(10, 30, 50, 65)
+  ) +
+  scale_x_continuous(labels = comma, breaks = seq(0, 8000, 1000)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  annotate("rect", 
+           xmin = -Inf, xmax = 500, 
+           ymin = 0.65, ymax = Inf,
+           fill = "#E74C3C", alpha = 0.1) +
+  annotate("text", 
+           x = 250, y = 0.85,
+           label = "Inflated DR\n(measurement artifact)",
+           size = 3.5, color = "#E74C3C", fontface = "italic") +
+  labs(
+    title = "Discovery Ratio by Activity Level",
+    subtitle = "Low-activity participants show artificially high DR due to thin viewing histories",
+    x = "Average Videos per Week",
+    y = "Average Discovery Ratio",
+    caption = "Point size indicates number of weeks observed"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(color = "grey40", size = 11),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    panel.grid.minor = element_blank()
+  ) +
+  guides(
+    color = guide_legend(order = 1, override.aes = list(size = 4)),
+    shape = guide_legend(order = 1, override.aes = list(size = 4)),
+    size = guide_legend(order = 2)
+  )
+
+ggsave("output/plot_DR_reliability.png", p3, 
+       width = 10, height = 7, dpi = 300)
+
+library(patchwork)
+
+combined_plot <- (p1 / p2) | p3
+
+combined_plot <- combined_plot + 
+  plot_annotation(
+    title = "Sample Selection Threshold Analysis",
+    subtitle = "Justification for 500 videos/week exclusion criterion",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 16),
+      plot.subtitle = element_text(size = 12, color = "grey40")
+    )
+  )
+
+ggsave("output/plot_combined_threshold_analysis.png", combined_plot,
+       width = 16, height = 10, dpi = 300)
